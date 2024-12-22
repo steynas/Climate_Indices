@@ -1,153 +1,134 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Sep  6 09:00:20 2024
+Script to merge weather station data and climate database data for statistical analysis.
 
-This scripts reads the daily station data from Excel (combined) = stn
-and the climate database reanalysis data from CSV (nearest grid point) =cdb
-and merge them into a single CSV file for statistical analysis
-Just change the name of the input and output file & path, e.g.:
-input1 = Glen_Combined_1984_2023.xlsx
-input2 = ClimateTimeSeries_AgERA5_-28.9_26.3.csv
-output = Glen_Merged_stn_cdb.csv
+- Supports multiple station files (stn) with respective climate database (cdb) files.
+- Uses the closest climate database data for each station based on longitude and latitude.
+Input: StationName_combined_cleaned.xlsx, ClimateTimeSeries_AgERA5_coordinates.csv
+Output: Merged_StationName_stn_cdb.csv
 
-@author: SteynAS
+@author: SteynAS@ufs.ac.za
 """
 
 import os
 import pandas as pd
 
-# Define the directory and file names
-stn_dir = r'C:\StnData'
-cdb_dir = r'C:\AgERA5\ClimDataBase'
-stn_file = 'Glen_Combined_1984_2023.xlsx'
-cdb_file = 'ClimateTimeSeries_AgERA5_-28.9_26.3.csv'
-merged_file = 'Glen_Merged_stn_cdb.csv'
-monthly_file = 'Glen_Merged_Monthly_Aggregated.csv'
+# Define paths
+stn_dir = 'C:/StnData/QControlled'
+cdb_dir = 'C:/AgERA5/ClimDataBase'
+output_dir = 'C:/StnData/StatisticalAnalysis'
 
-# Paths to the files
-file_path_cdb = os.path.join(cdb_dir, cdb_file)
-file_path_stn = os.path.join(stn_dir, stn_file)
-merged_file_path = os.path.join(stn_dir, merged_file)
-monthly_file_path = os.path.join(stn_dir, monthly_file)
-
-
-# Load the CSV file into a DataFrame
-df_cdb = pd.read_csv(file_path_cdb, parse_dates=['Date'])
-
-# Load the Excel file into a DataFrame
-df_stn = pd.read_excel(file_path_stn, parse_dates=['Date'])
-
-# Display basic information about the CSV dataset
-print("\nBasic Information about the Climate Time Series CSV dataset:")
-df_cdb.info()
-
-# Display the first few rows of the CSV dataset
-print("\nFirst 5 rows of the Climate Time Series CSV dataset:")
-print(df_cdb.head())
-
-# Display basic information about the Excel dataset
-print("\nBasic Information about the Glen Combined Excel dataset:")
-df_stn.info()
-
-# Display the first few rows of the Excel dataset
-print("\nFirst 5 rows of the Glen Combined Excel dataset:")
-print(df_stn.head())
-
-# Define the complete date range for alignment
-date_range = pd.date_range(start='1979-01-01', end='2023-12-31')
-
-# Set 'Date' as the index for both dataframes
-df_cdb.set_index('Date', inplace=True)
-df_stn.set_index('Date', inplace=True)
-
-# Reindex the cdb dataframe to ensure it covers the complete date range
-# stn dataframe is kept as-is since we only want rows where data exists.
-df_cdb = df_cdb.reindex(date_range)
-
-# Reset the index to have 'Date' as a column again
-df_cdb.reset_index(inplace=True)
-df_stn.reset_index(inplace=True)
-
-# Rename the index column back to 'Date'
-df_cdb.rename(columns={'index': 'Date'}, inplace=True)
-df_stn.rename(columns={'index': 'Date'}, inplace=True)
-
-# Rename columns as specified
-# Station (stn) data renaming
-stn_rename_mapping = {
-    'Tx': 'stn_Tmax',
-    'Tn': 'stn_Tmin',
-    'RHx': 'stn_RHmax',
-    'RHn': 'stn_RHmin',
-    'U2': 'stn_WSmean',
-    'Rs est.': 'stn_SR',
-    'Rain': 'stn_Pr',
-    'PM ET0': 'stn_ETo'
+# Menu options for stations and corresponding mappings
+station_options = {
+    1: ("Polokwane", "Polokwane_combined_cleaned.xlsx", {
+        (29.69368, -23.83615): 'ClimateTimeSeries_AgERA5_-23.8_29.7.csv',
+        (29.693475, -23.836094): 'ClimateTimeSeries_AgERA5_-23.8_29.7.csv'
+    }),
+    2: ("Mbombela", "Mbombela_combined_cleaned.xlsx", {
+        (30.85000038, -25.35000038): 'ClimateTimeSeries_AgERA5_-25.4_30.9.csv',
+        (30.97159, -25.45455): 'ClimateTimeSeries_AgERA5_-25.5_31.0.csv'
+    }),
+    3: ("Potchefstroom", "Potchefstroom_combined_cleaned.xlsx", {
+        (27.08333397, -26.73333359): 'ClimateTimeSeries_AgERA5_-26.7_27.1.csv',
+        (27.07553, -26.73607): 'ClimateTimeSeries_AgERA5_-26.7_27.1.csv'
+    }),
+    4: ("Bloemfontein", "GlenCollege_combined_cleaned.xlsx", {
+        (26.35000038, -28.95000076): 'ClimateTimeSeries_AgERA5_-28.9_26.3.csv',
+        (26.32633, -28.92957): 'ClimateTimeSeries_AgERA5_-28.9_26.3.csv',
+        (26.32631, -28.92957): 'ClimateTimeSeries_AgERA5_-28.9_26.3.csv'
+    }),
+    5: ("Richards Bay", "RichardsBay_combined_cleaned.xlsx", {
+        (31.89813, -28.72496): 'ClimateTimeSeries_AgERA5_-28.7_31.9.csv',
+        (32.06295, -28.63707): 'ClimateTimeSeries_AgERA5_-28.6_32.1.csv'
+    }),
+    6: ("East London", "EastLondon_combined_cleaned.xlsx", {
+        (27.83333397, -33.03333282): 'ClimateTimeSeries_AgERA5_-33.0_27.8.csv',
+        (27.5, -33.03333282): 'ClimateTimeSeries_AgERA5_-33.0_27.5.csv'
+    }),
+    7: ("Gqeberha", "PortElizabeth_combined_cleaned.xlsx", {
+        (25.31666756, -33.76666641): 'ClimateTimeSeries_AgERA5_-33.8_25.3.csv',
+        (25.327288, -33.774138): 'ClimateTimeSeries_AgERA5_-33.8_25.3.csv'
+    }),
+    8: ("Oudtshoorn", "Oudtshoorn_combined_cleaned.xlsx", {
+        (22.25, -33.63333511): 'ClimateTimeSeries_AgERA5_-33.6_22.3.csv',
+        (22.257684, -33.630323): 'ClimateTimeSeries_AgERA5_-33.6_22.3.csv'
+    })
 }
-df_stn.rename(columns=stn_rename_mapping, inplace=True)
 
-# Climate database (cdb) data renaming
-cdb_rename_mapping = {
-    'Tmax': 'cdb_Tmax',
-    'Tmin': 'cdb_Tmin',
-    'RHmax': 'cdb_RHmax',
-    'RHmin': 'cdb_RHmin',
-    'WSmean': 'cdb_WSmean',
-    'SR': 'cdb_SR',
-    'Pr': 'cdb_Pr',
-    'ETo': 'cdb_ETo'
-}
-df_cdb.rename(columns=cdb_rename_mapping, inplace=True)
+# Display menu and get user input
+print("Select a station:")
+for key, value in station_options.items():
+    print(f"{key}: {value[0]}")
+    
+selected_option = int(input("\nEnter the number corresponding to your choice: "))
 
-# Merge the dataframes on 'Date' for comparison
-df_merged = pd.merge(df_stn, df_cdb, on='Date', how='left', suffixes=('_stn', '_cdb'))
+if selected_option not in station_options:
+    print("Invalid selection. Exiting.")
+    exit()
 
-# Filter the merged dataframe to keep only the rows where stn data exists (non-null 'stn_Tmax')
-df_merged = df_merged[df_merged['stn_Tmax'].notnull()]
+# Get the selected station details
+station_name, station_file, stn_cdb_mapping = station_options[selected_option]
 
-# Select only the columns to include in the output
-columns_to_include = ['Date'] + list(stn_rename_mapping.values()) + list(cdb_rename_mapping.values())
-df_merged = df_merged[columns_to_include]
+# Initialize an empty DataFrame to store merged results
+merged_results = []
 
-# Save the filtered merged dataset to the specified output file
-df_merged.to_csv(merged_file_path, index=False)
-print(f"\nMerged comparison data saved to: {merged_file_path}")
+# Process each mapping for the selected station
+for (longitude, latitude), cdb_file in stn_cdb_mapping.items():
+    # Paths for station and climate database files
+    file_path_stn = os.path.join(stn_dir, station_file).replace("\\", "/")
+    file_path_cdb = os.path.join(cdb_dir, cdb_file).replace("\\", "/")
+    
+    # Load station data
+    df_stn = pd.read_excel(file_path_stn, parse_dates=['Date'])
 
-# Display the first few rows of the final output for verification
-print("\nFirst 5 rows of the final output:")
-print(df_merged.head())
+    # Filter station data based on coordinates (optional, if data has mixed locations in a single file)
+    df_stn = df_stn[(df_stn['Longitude'] == longitude) & (df_stn['Latitude'] == latitude)]
 
-# Parse 'Date' as datetime if not already done
-df_merged['Date'] = pd.to_datetime(df_merged['Date'])
+    # Rename station data columns
+    stn_rename_mapping = {
+        'Tmax': 'stn_Tmax',
+        'Tmin': 'stn_Tmin',
+        'RHmax': 'stn_RHmax',
+        'RHmin': 'stn_RHmin',
+        'WSmean': 'stn_WSmean',
+        'SR': 'stn_SR',
+        'Pr': 'stn_Pr',
+        'ETo': 'stn_ETo'
+    }
+    df_stn.rename(columns=stn_rename_mapping, inplace=True)
 
-# Convert relevant columns to numeric, coercing errors to NaN
-numeric_columns = [
-    'stn_Tmax', 'stn_Tmin', 'stn_RHmax', 'stn_RHmin', 'stn_WSmean', 'stn_SR', 'stn_Pr', 'stn_ETo',
-    'cdb_Tmax', 'cdb_Tmin', 'cdb_RHmax', 'cdb_RHmin', 'cdb_WSmean', 'cdb_SR', 'cdb_Pr', 'cdb_ETo'
-]
-df_merged[numeric_columns] = df_merged[numeric_columns].apply(pd.to_numeric, errors='coerce')
+    # Load climate database data
+    df_cdb = pd.read_csv(file_path_cdb, parse_dates=['Date'])
 
-# Extract 'Year' and 'Month' from the 'Date' column
-df_merged['Year'] = df_merged['Date'].dt.year
-df_merged['Month'] = df_merged['Date'].dt.month
+    # Rename climate database columns
+    cdb_rename_mapping = {
+        'Tmax': 'cdb_Tmax',
+        'Tmin': 'cdb_Tmin',
+        'RHmax': 'cdb_RHmax',
+        'RHmin': 'cdb_RHmin',
+        'WSmean': 'cdb_WSmean',
+        'SR': 'cdb_SR',
+        'Pr': 'cdb_Pr',
+        'ETo': 'cdb_ETo'
+    }
+    df_cdb.rename(columns=cdb_rename_mapping, inplace=True)
 
-# Group by 'Year' and 'Month'
-grouped = df_merged.groupby(['Year', 'Month'])
+    # Merge station data with climate database data on 'Date'
+    df_merged = pd.merge(df_stn, df_cdb, on='Date', how='left')
 
-# Calculate monthly totals for precipitation and solar radiation (additive variables)
-monthly_totals = grouped[['stn_Pr', 'stn_ETo', 'stn_SR', 'cdb_Pr', 'cdb_ETo', 'cdb_SR']].sum()
+    # Format 'Date' as YYYYMMDD
+    df_merged['Date'] = df_merged['Date'].dt.strftime('%Y%m%d')
 
-# Calculate monthly means for temperature, humidity, wind speed, and ET0 (non-additive variables)
-monthly_means = grouped[
-    ['stn_Tmax', 'stn_Tmin', 'stn_RHmax', 'stn_RHmin', 'stn_WSmean', 
-     'cdb_Tmax', 'cdb_Tmin', 'cdb_RHmax', 'cdb_RHmin', 'cdb_WSmean']
-].mean()
+    # Add results to the list
+    merged_results.append(df_merged)
 
-# Combine the totals and means into a single DataFrame
-monthly_aggregated = pd.concat([monthly_totals, monthly_means], axis=1)
+# Concatenate all merged results into a single DataFrame
+final_merged = pd.concat(merged_results, ignore_index=True)
 
-# Display the first few rows of the aggregated results
-print(monthly_aggregated.head())
+# Save the final merged DataFrame to a CSV file
+final_output_file = f"Merged_{station_name.replace(' ', '')}_stn_cdb.csv"
+final_output_path = os.path.join(output_dir, final_output_file).replace("\\", "/")
+final_merged.to_csv(final_output_path, index=False, na_rep='NaN')  # Explicitly write 'NaN' for missing values
 
-# Optionally, save to a CSV file
-monthly_aggregated.to_csv(monthly_file_path)
+print(f"Merged dataset saved to: {final_output_path}")
+
