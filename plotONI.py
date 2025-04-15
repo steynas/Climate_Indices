@@ -100,6 +100,7 @@ ax.set_ylim(-3, 3)
 ax.set_xlim(0, len(month_labels) - 1)
 ax.set_xticks(range(len(month_labels)))
 ax.set_xticklabels(month_labels)
+ax.set_yticks([x * 0.5 for x in range(-6, 7)])  # Add tick every 0.5 from -3 to 3
 ax.tick_params(axis='y', pad=8)  # Add spacing between tick marks and labels
 ax.grid(True, linestyle="--", alpha=0.5)
 plt.tight_layout()
