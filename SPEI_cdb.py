@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
+r"""
 Created on Fri 3 Jan 2025
 Input: C:/AgERA5/ClimDataBase/ClimateTimeSeries_AgERA5_{lat}_{lon}.csv, 
 This script reads csv file containing daily reanalysis (cdb) data for
@@ -13,10 +13,10 @@ probabilities at 3-, 6- and 12-month timescales. This script is
 based on the R-script used by Beguería & Vicente-Serrano at
 https://CRAN.R-project.org/package=SPEI 
 3m, 6m, 12m SPEI values are output to 
-C:\StnData\StatisticalAnalysis\{lat}_{lon}_SPEI.csv
-Time series are plotted as SPEI_3_{lat}_{lon}_Plot.png etc. and 
-All_SPEI_{lat}_{lon}_Plot.png under C:\StnData\StatisticalAnalysis\Plots
-    
+C:\StnData\StatisticalAnalysis\{station_name}_SPEI.csv
+Time series are plotted as SPEI_3_{station_name}_Plot.png etc. and 
+All_SPEI_{station_name}_Plot.png under C:\StnData\StatisticalAnalysis\Plots
+
 @author: SteynAS@ufs.ac.za
 """
 
@@ -28,93 +28,83 @@ import matplotlib.pyplot as plt
 
 # Function to calculate SPEI
 def calculate_spei_custom(data, timescale):
-    """
-    Calculate SPEI using rolling sums and a Pearson Type III distribution.
-
-    Parameters:
-    - data (pd.DataFrame): DataFrame with a 'WaterBalance' column.
-    - timescale (int): The timescale for SPEI (e.g., 3, 6, 12 months).
-
-    Returns:
-    - pd.Series: SPEI values for the given timescale.
-    """
-    # Calculate rolling sum for the water balance
     rolling_balance = data['WaterBalance'].rolling(timescale, min_periods=timescale).sum()
-
-    # Fit a Pearson Type III distribution to the rolling sums
     spei_values = []
     for i in range(len(rolling_balance)):
-        if i < timescale - 1:  # Not enough data to calculate
+        if i < timescale - 1:
             spei_values.append(np.nan)
         else:
-            rolling_window = rolling_balance[: i + 1]  # Data up to current point
-            params = pearson3.fit(rolling_window.dropna())  # Fit distribution
-            standardized = pearson3.cdf(rolling_balance[i], *params)  # Convert to probability
-            spei_values.append(norm.ppf(standardized))  # Convert to Z-score
-
+            rolling_window = rolling_balance[: i + 1]
+            params = pearson3.fit(rolling_window.dropna())
+            standardized = pearson3.cdf(rolling_balance[i], *params)
+            spei_values.append(norm.ppf(standardized))
     return pd.Series(spei_values, index=data.index)
 
 # Function to plot SPEI
-def plot_spei(data, column, lat, lon, output_dir):
-    """
-    Plot SPEI over time.
-
-    Parameters:
-    - data (pd.DataFrame): DataFrame containing SPEI values and dates.
-    - column (str): Column name for the SPEI values to plot.
-    - lat (float): Latitude for the caption.
-    - lon (float): Longitude for the caption.
-    - output_dir (str): Directory to save the plot.
-    """
-    fig, ax = plt.subplots(figsize=(12, 7))  # Unified layout for all plots
-    ax.plot(data['YearMonth'], data[column], color='green')
-    ax.axhline(0, color='black', linestyle='--', linewidth=0.8)
+def plot_spei(data, column, station_name, output_dir):
+    filtered = data.iloc[30:].copy()
+    fig, ax = plt.subplots(figsize=(12, 7))
+    ax.plot(filtered['YearMonth'], filtered[column], color='green')
+    for threshold in [-2, -1, 1, 2]:
+        ax.axhline(threshold, color='black', linestyle='--', linewidth=0.6)
+    ax.axhline(0, color='black', linestyle='-', linewidth=0.8)
     ax.set_ylim(-5, 5)
     ax.set_ylabel("Standardized Precipitation Evapotranspiration Index (SPEI)")
-    data['FormattedYearMonth'] = pd.to_datetime(data['YearMonth'], format='%Y%m').dt.strftime('%Y-%m')
-    ax.set_xticks(range(len(data['YearMonth'])))
-    ax.set_xticklabels([date if int(date[-2:]) in [1, 7] else '' for date in data['FormattedYearMonth']], rotation=90)
+    filtered['FormattedYearMonth'] = pd.to_datetime(filtered['YearMonth'], format='%Y%m').dt.strftime('%Y-%m')
+    ax.set_xticks(range(len(filtered['YearMonth'])))
+    ax.set_xticklabels([date if int(date[-2:]) in [1, 7] else '' for date in filtered['FormattedYearMonth']], rotation=90)
     ax.set_yticks(np.arange(-5, 6, 1))
-    ax.tick_params(axis='x', pad=5)  # Adjust padding for label clarity
-    ax.set_xlim(left=0, right=len(data['YearMonth']) - 1)  # Align first x-axis marker with y-axis
-    ax.set_title(f"{column.replace('SPEI_', '').replace('3', '3-month').replace('6', '6-month').replace('12', '12-month')} SPEI for lat = {lat}, lon = {lon}")
-    fig.tight_layout()  # Ensure consistent layout
-    plt.savefig(os.path.join(output_dir, f"{column}_{lat}_{lon}_Plot.png"))
+    ax.tick_params(axis='x', pad=5)
+    ax.set_xlim(left=0, right=len(filtered['YearMonth']) - 1)
+    ax.set_title(f"{column.replace('SPEI_', '').replace('3', '3-month').replace('6', '6-month').replace('12', '12-month')} SPEI for {station_name}")
+    fig.tight_layout()
+    plt.savefig(os.path.join(output_dir, f"{column}_{station_name}_Plot.png"))
     plt.close()
 
 # Function to plot all SPEI timescales on one plot
-def plot_all_spei(data, lat, lon, output_dir):
-    """
-    Plot all SPEI timescales on one plot.
-
-    Parameters:
-    - data (pd.DataFrame): DataFrame containing SPEI values and dates.
-    - lat (float): Latitude for the caption.
-    - lon (float): Longitude for the caption.
-    - output_dir (str): Directory to save the plot.
-    """
-    fig, ax = plt.subplots(figsize=(12, 7))  # Unified layout for all plots
-    ax.plot(data['YearMonth'], data['SPEI_3'], color='red', linestyle='-', label='3m SPEI')
-    ax.plot(data['YearMonth'], data['SPEI_6'], color='green', linestyle='--', label='6m SPEI')
-    ax.plot(data['YearMonth'], data['SPEI_12'], color='blue', linestyle='-.', label='12m SPEI')
-    ax.axhline(0, color='black', linestyle='--', linewidth=0.8)
+def plot_all_spei(data, station_name, output_dir):
+    filtered = data.iloc[30:].copy()
+    fig, ax = plt.subplots(figsize=(12, 7))
+    ax.plot(filtered['YearMonth'], filtered['SPEI_3'], color='red', linestyle='-', label='3m SPEI')
+    ax.plot(filtered['YearMonth'], filtered['SPEI_6'], color='green', linestyle='--', label='6m SPEI')
+    ax.plot(filtered['YearMonth'], filtered['SPEI_12'], color='blue', linestyle='-.', label='12m SPEI')
+    for threshold in [-2, -1, 1, 2]:
+        ax.axhline(threshold, color='black', linestyle='--', linewidth=0.6)
+    ax.axhline(0, color='black', linestyle='-', linewidth=0.8)
     ax.set_ylim(-5, 5)
     ax.set_ylabel("Standardized Precipitation Evapotranspiration Index (SPEI)")
-    data['FormattedYearMonth'] = pd.to_datetime(data['YearMonth'], format='%Y%m').dt.strftime('%Y-%m')
-    ax.set_xticks(range(len(data['YearMonth'])))
-    ax.set_xticklabels([date if int(date[-2:]) in [1, 7] else '' for date in data['FormattedYearMonth']], rotation=90)
+    filtered['FormattedYearMonth'] = pd.to_datetime(filtered['YearMonth'], format='%Y%m').dt.strftime('%Y-%m')
+    ax.set_xticks(range(len(filtered['YearMonth'])))
+    ax.set_xticklabels([date if int(date[-2:]) in [1, 7] else '' for date in filtered['FormattedYearMonth']], rotation=90)
     ax.set_yticks(np.arange(-5, 6, 1))
-    ax.tick_params(axis='x', pad=5)  # Adjust padding for label clarity
-    ax.set_xlim(left=0, right=len(data['YearMonth']) - 1)  # Align first x-axis marker with y-axis
-    ax.set_title(f"SPEI for lat = {lat}, lon = {lon}")
+    ax.tick_params(axis='x', pad=5)
+    ax.set_xlim(left=0, right=len(filtered['YearMonth']) - 1)
+    ax.set_title(f"SPEI for {station_name}")
     ax.legend()
-    fig.tight_layout()  # Ensure consistent layout
-    plt.savefig(os.path.join(output_dir, f"All_SPEI_{lat}_{lon}_Plot.png"))
+    fig.tight_layout()
+    plt.savefig(os.path.join(output_dir, f"All_SPEI_{station_name}_Plot.png"))
     plt.close()
 
-# Input prompts
-lat = round(float(input("Enter the latitude of the location (e.g., -20.1): ")), 1)
-lon = round(float(input("Enter the longitude of the location (e.g., 15.1): ")), 1)
+# Station selection
+stations = {
+    "Polokwane": (-23.8, 29.7),
+    "Mbombela": (-25.5, 31.0),
+    "Potchefstroom": (-26.7, 27.1),
+    "Bloemfontein": (-28.9, 26.3),
+    "Richards Bay": (-28.6, 32.1),
+    "East London": (-33.0, 27.5),
+    "Gqeberha": (-33.8, 25.3),
+    "Oudtshoorn": (-33.6, 22.3)
+}
+
+print("Please choose a weather station from the following list:")
+for idx, name in enumerate(stations, 1):
+    print(f"{idx}. {name}")
+
+choice = int(input("Enter the number corresponding to the station: "))
+station_name = list(stations.keys())[choice - 1]
+lat, lon = stations[station_name]
+
 input_file_name = f"ClimateTimeSeries_AgERA5_{lat}_{lon}.csv"
 input_file = f"C:\\AgERA5\\ClimDataBase\\{input_file_name}"
 start_date = input("Enter the start date (YYYYMMDD): ")
@@ -137,16 +127,17 @@ monthly_data['SPEI_6'] = calculate_spei_custom(monthly_data, 6)
 monthly_data['SPEI_12'] = calculate_spei_custom(monthly_data, 12)
 
 # Save to a new CSV file
-output_file = f"C:\\StnData\\StatisticalAnalysis\\{lat}_{lon}_SPEI.csv"
+output_file = f"C:\\StnData\\StatisticalAnalysis\\{station_name}_SPEI.csv"
 monthly_data.to_csv(output_file, index=False)
 print(f"SPEI values saved to: {output_file}")
 
 # Create plots directory
-plots_dir = "C:\\StnData\\StatisticalAnalysis\\Plots"
-os.makedirs(plots_dir, exist_ok=True)
+output_dir = "C:\\StnData\\StatisticalAnalysis\\Plots"
+os.makedirs(output_dir, exist_ok=True)
 
 # Generate and save plots
-plot_spei(monthly_data, 'SPEI_3', lat, lon, plots_dir)
-plot_spei(monthly_data, 'SPEI_6', lat, lon, plots_dir)
-plot_spei(monthly_data, 'SPEI_12', lat, lon, plots_dir)
-plot_all_spei(monthly_data, lat, lon, plots_dir)
+plot_spei(monthly_data, 'SPEI_3', station_name, output_dir)
+plot_spei(monthly_data, 'SPEI_6', station_name, output_dir)
+plot_spei(monthly_data, 'SPEI_12', station_name, output_dir)
+plot_all_spei(monthly_data, station_name, output_dir)
+
